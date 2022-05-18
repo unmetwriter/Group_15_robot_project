@@ -1,159 +1,188 @@
+
+
+
 from pybricks.hubs import EV3Brick
 from pybricks.robotics import DriveBase
 from pybricks.ev3devices import Motor, TouchSensor, ColorSensor, UltrasonicSensor
 from pybricks.parameters import Port, Direction
 from pybricks.tools import wait
 from pybricks.parameters import Color
-from misc import notify_operation
+from misc import notify_operation, speak
 import pickup
-
 import time
 
 
-ev3 = EV3Brick
 class DriveRobot:
-    
-    def __init__(self, drive_base, color_sen, crane):
+
+    def __init__(self, drive_base, color_sen, crane, ultra_sen):
         self.m_drive_base = drive_base
         self.m_color_sen = color_sen
-        self.col = Color.GREEN
+        self.m_ultra_sen = ultra_sen
+        self.m_crane = crane
+
+        self.curr_col = Color.BLUE
         self.change_col = Color.BROWN
-        self.m_Crane = crane
-
-    def drive(self,in_time=0, path= 20):
-        '''Moves the car along a predetermined path, turning as need be'''
-        change = True
-        start_time = time.time()
-        print((time.time()-start_time))
-        while change and ((time.time()-start_time)<in_time or in_time == 0):
-            turned = 1
-            self.m_drive_base.drive(30,0)
-            deviation = self.m_color_sen.reflection() - path
-            
-            while (deviation > path):
-                self.m_drive_base.stop()
-                turned = -2*turned
-                self.m_drive_base.turn(turned)
-                deviation = self.m_color_sen.reflection() - path
-                if(turned > 180):
-                    quit
-                    #EmergencyMode()
-        print("Hejsan svejsan",start_time-time.time())      
-            #change = get_change(path, color_sen)
-
-    def return_to_area(self,area):
-        location_dict = {
-            "Warehouse": 20, 
-            "Blue Warehouse": 20,
-            "Red Warehouse" : 20,
-            "Pickup and delivery": 20}
-        while(self.m_color_sen.reflection()!=location_dict[area]):
-            self.drive(2)
-
-        self.drive(0,location_dict[area]) 
-
-    def emergency_mode(self):
-        notify_operation("emergency mode")
-        self.m_Crane.m_crane.run_until_stalled(-90)
-        wait(2000)
-        self.m_drivebase.drive(-55,0)
-        for i in range(1,4):
-            ev3.speaker.beep()
-            wait(1000)
-   
-
-    def drive2(self,in_time=0, path= 20):
-        current_operation = "Drive. follow path " + str(self.col)
-        notify_operation(current_operation)
-        change = True
+        self.second_change_col = Color.RED
         
+    def drive(self, in_time=0):
+        notify_operation("Driving")
         start_time = time.time()
-        print((time.time()-start_time))
-        while change and ((time.time()-start_time)<in_time or in_time == 0):
-            turned = 1
-            self.m_drive_base.drive(30,0)
-            deviation = self.m_color_sen.color()
-            if self.m_Crane.pallet_on == True:
-                if self.m_Crane.m_touch_sen.pressed() == False:
-                    self.emergency_mode(self)
-                    quit
-            
-            while (deviation != self.col):
-                
-                if (deviation == self.change_col):
-                    self.col = self.change_col
-                    self.change_col = None
-                elif deviation != Color.WHITE:
-                    self.m_drive_base.straight(10)
-                #elif deviation != Color.BLACK:
-                 #   quit
-
+        breaktime = True
+        while ((time.time()-start_time) < in_time or in_time == 0 or breaktime):
+            turned = -1
+            self.avoid_collision()
+            self.m_drive_base.drive(50, 0)
+            # wait(500)
+            while self.m_color_sen.color() in [Color.WHITE, Color.YELLOW]:
+                turned = -1.75*turned
                 self.m_drive_base.stop()
-                turned = -1.5*turned
                 self.m_drive_base.turn(turned)
-                deviation = self.m_color_sen.color()
-                
-                if(turned > 180):
-                    ev3.speaker.say("Cant find line. Abort drive")
-                    quit
+                if turned > 180:
+                    self.emergency_mode("Finding path")
+                    self.m_drive_base.turn(-turned)
+                    self.m_drive_base.straight(-100)
 
-    def return_to_area(self, area):
-        color = color()
-        location_dict = {
-            "Warehouse": color.BOWN,
-            "Blue Warehouse": color.BLUE,
-            "Red Warehouse": color.RED,
-            "Pickup and delivery": color.GREEN,
-            "Center": color.GREEN}
-        while(self.m_color_sen.color() != location_dict[area]):
-            self.drive(1)
+            if(self.m_color_sen.color() not in [self.change_col, self.curr_col, Color.BLACK, Color.YELLOW, Color.WHITE]):
+                self.m_drive_base.straight(20)
 
-        self.drive(0, location_dict[area])
+            if(self.m_color_sen.color() == Color.BLACK):
+                speak("Arrived at Warehouse")
+                quit
 
+            if(self.m_crane.pallet_on and not self.m_crane.m_touch_sen.pressed()):
+                self.emergency_mode("Pallet")
+                breaktime = not breaktime
+
+            if(self.m_color_sen.color() == self.change_col):
+                self.curr_col = self.change_col                
+                self.change_col = self.second_change_col
+                self.second_change_col = None
+                speak("Left area")
+                speak("Beep")
 
     def avoid_collision(self):
-        if self.m_ultra_sen.distance() < 100:
-            self.m_drive_base.run(-30)
-            # Emergency mode
- 
-    def left_area(self, area):
-        colour = Color()
-        ev3 = EV3Brick()
-        if self.m_color_sen.color() != colour.White and self.m_color_sen.color() != area:
-            ev3.speaker.beep()
-            print(self.Col)
-            self.Col = self.m_color_sen.color()
+        notify_operation("Avoid Collision")
+        start_time = time.time()
+        while(self.m_ultra_sen.distance() < 100):
+            self.m_drive_base.stop()
+            print(start_time - time.time())
+            if( time.time()- start_time > 10):
+                speak("Item misplaced!")
+                self.emergency_mode()
 
     def set_color(self, str_color):
         color_dict = {
             "brown": Color.BROWN,
             "blue": Color.BLUE,
             "red": Color.RED,
-            "green": Color.GREEN,}
-        self.col = color_dict(str_color)
-        return
-            
-    def set_color_change(self, str_color_change):
+
+            "green": Color.GREEN, }
+        self.curr_col = color_dict[str_color]
+
+    def set_color_change(self, str_color_change, col_change2 = "brown"):
+
         color_dict = {
             "brown": Color.BROWN,
             "blue": Color.BLUE,
             "red": Color.RED,
-            "green": Color.GREEN,}
-        self.change_col = color_dict(str_color_change)
-        return
+            "green": Color.GREEN, }
+        self.change_col = color_dict[str_color_change]
+        self.second_change_col = color_dict[col_change2]
 
     def return_to_circle(self):
-        self.m_drive_base.turn(180)
         self.set_color_change("brown")
-
+    
     def select_area(self, area):
-        
         location_dict = {
-            "Blue Warehouse": Color.BLUE,
-            "Red Warehouse": Color.RED,
-            "Pickup and delivery": Color.GREEN,}
-        if self.col != Color.BROWN:
-            self.return_to_circle(self)
+            "Blue Warehouse": "blue",
+            "Red Warehouse": "red",
+            "Pickup and delivery": "green" }
+        self.set_color_change("brown",location_dict[area])
 
-        self.set_color_change(self, location_dict(area))
-        self.set_color(self, "brown")
+    def warehouse_drive(self, in_time=10, ):
+        '''Help function for finding  crates in warehouses'''
+        start_time = time.time()
+        print((time.time()-start_time))
+        while((time.time()-start_time) < in_time or in_time == 0):
+            turned = -1
+            self.m_drive_base.drive(50, 0)
+            deviation = self.m_color_sen.reflection() - 20
+
+            while (deviation < 20):
+                self.m_drive_base.stop()
+                turned = -2*turned
+                self.m_drive_base.turn(turned)
+                deviation = self.m_color_sen.reflection() - 20
+                if(turned > 180):
+                    quit
+                    self.emergency_mode()
+
+    def red_warehouse_adjust(self, part):
+        notify_operation("Red warejouse adjust")
+        self.m_drive_base.drive(60, 0)
+        wait(4000)
+        self.m_drive_base.drive(30, 130)
+        wait(1000)
+        counter = 0
+        while(counter != part):
+            self.m_drive_base.drive(50, 0)
+
+            if(self.m_color_sen.color() != Color.YELLOW):
+                wait(250)
+
+            if(self.m_color_sen.color() == Color.YELLOW):
+                counter = counter+1
+                while(self.m_color_sen.color() == Color.YELLOW and counter != part):
+                    wait(1000)
+                print(counter)
+        self.m_drive_base.drive(-30, -200)
+        wait(500)
+        self.warehouse_drive(13)
+        self.m_crane.pick_up_pallet()
+        self.m_drive_base.drive(-50, 0)
+        while(self.m_color_sen.color() != Color.WHITE):
+            wait(500)
+        self.m_drive_base.drive_time(0, -360, 5000)
+   
+   
+    def blue_warehouse_adjust(self, part):
+        notify_operation("Red warejouse adjust")
+        while(self.m_color_sen.color() != Color.YELLOW):
+            self.m_drive_base.drive(-10,-40)
+            wait(250)
+        self.m_drive_base.stop()
+        counter = 1
+        while(counter != part):
+            self.m_drive_base.drive(50, 0)
+
+            if(self.m_color_sen.color() != Color.YELLOW):
+                wait(250)
+
+            if(self.m_color_sen.color() == Color.YELLOW):
+                counter = counter+1
+                while(self.m_color_sen.color() == Color.YELLOW and counter != part):
+                    wait(1000)
+        wait(500)
+        while(not self.m_crane.m_touch_sen.pressed()):
+            self.warehouse_drive(0.5)
+        self.m_drive_base.stop()
+        self.m_crane.pick_up_pallet()
+        self.m_drive_base.drive(-50, 0)
+        while(self.m_color_sen.color() != Color.WHITE):
+            wait(500)
+       
+        self.m_drive_base.drive_time(-50,45, 4000)
+        self.m_drive_base.drive(50, 0)
+        while(self.m_color_sen.color() != Color.BLUE):
+            wait(250)
+
+    def emergency_mode(self, operation=""):
+        notify_operation("emergency mode")
+        speak(operation+" failed")
+        self.m_crane.m_crane.run_until_stalled(90)
+        wait(2000)
+        self.m_drive_base.straight(-55)
+        for i in range(4):
+            speak("Beep")
+            wait(1000)
+

@@ -13,3 +13,17 @@ def notify_operation(current_operation):
     ev3.screen.draw_text(40, 50, current_operation)
     ev3.speaker.say("performing" + current_operation)
     print("current operation is" + current_operation)
+
+
+
+def speak(line):
+    if(line == "Beep"):
+        ev3.speaker.beep()
+    else:
+        ev3.speaker.say(line)
+
+def get_colour(color_sen):
+    while(True):
+        print(color_sen.rgb())
+        wait(5000)
+
